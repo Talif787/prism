@@ -1,0 +1,53 @@
+# Phase 1 local stack: Postgres for the control plane and an OpenTelemetry
+# Collector plus Jaeger for traces. Later phases add Kafka, ClickHouse, and Redis.
+name: prism
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: prism
+      POSTGRES_PASSWORD: prism
+      POSTGRES_DB: prism
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prism"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    ports:
+      - "16686:16686"   # UI
+      - "4317:4317"     # OTLP gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  controlplane:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    environment:
+      APP_ENV: local
+      HTTP_PORT: "8080"
+      DATABASE_URL: postgres://prism:prism@postgres:5432/prism?sslmode=disable
+      AUTH_MODE: dev
+      AUTH_DEV_HS256_SECRET: local-dev-secret-change-me
+      INTERNAL_API_TOKEN: local-internal-token-change-me
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-controlplane
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

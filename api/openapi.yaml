@@ -1,0 +1,235 @@
+openapi: 3.1.0
+info:
+  title: Prism Control Plane API
+  version: 1.0.0
+  description: >
+    Tenant, membership, and API-key management for the Prism observability
+    platform. Console endpoints require a bearer token. The internal key
+    verification endpoint requires a service-to-service token.
+servers:
+  - url: http://localhost:8080
+    description: Local
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: Process is alive }
+  /readyz:
+    get:
+      summary: Readiness probe
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { description: Not ready }
+  /v1/tenants:
+    post:
+      summary: Create a tenant and its first owner
+      security:
+        - internalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTenantRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/tenants/{tenantID}:
+    get:
+      summary: Get a tenant
+      parameters: [ { $ref: "#/components/parameters/TenantID" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/tenants/{tenantID}/members:
+    get:
+      summary: List members
+      parameters: [ { $ref: "#/components/parameters/TenantID" } ]
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Add or re-role a member
+      parameters: [ { $ref: "#/components/parameters/TenantID" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddMemberRequest" }
+      responses:
+        "201": { description: Created }
+  /v1/tenants/{tenantID}/members/{userID}:
+    delete:
+      summary: Remove a member
+      parameters:
+        - { $ref: "#/components/parameters/TenantID" }
+        - { $ref: "#/components/parameters/UserID" }
+      responses:
+        "204": { description: Removed }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/tenants/{tenantID}/api-keys:
+    get:
+      summary: List API keys
+      parameters: [ { $ref: "#/components/parameters/TenantID" } ]
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Issue an API key
+      parameters: [ { $ref: "#/components/parameters/TenantID" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueKeyRequest" }
+      responses:
+        "201":
+          description: Created; the plaintext key is returned once
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedKey" }
+  /v1/tenants/{tenantID}/api-keys/{keyID}/rotate:
+    post:
+      summary: Rotate an API key
+      parameters:
+        - { $ref: "#/components/parameters/TenantID" }
+        - { $ref: "#/components/parameters/KeyID" }
+      responses:
+        "201": { description: Rotated; new plaintext returned once }
+  /v1/tenants/{tenantID}/api-keys/{keyID}/revoke:
+    post:
+      summary: Revoke an API key
+      parameters:
+        - { $ref: "#/components/parameters/TenantID" }
+        - { $ref: "#/components/parameters/KeyID" }
+      responses:
+        "204": { description: Revoked }
+  /internal/v1/keys/verify:
+    post:
+      summary: Verify an API key (service-to-service)
+      security:
+        - internalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VerifyKeyRequest" }
+      responses:
+        "200":
+          description: Valid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerifyKeyResponse" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+  parameters:
+    TenantID:
+      name: tenantID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserID:
+      name: userID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KeyID:
+      name: keyID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Problem:
+      description: RFC 7807 problem response
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        request_id: { type: string }
+    CreateTenantRequest:
+      type: object
+      required: [name, slug, owner_email]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        plan: { type: string, enum: [free, team, enterprise] }
+        owner_email: { type: string, format: email }
+        owner_name: { type: string }
+        owner_subject: { type: string }
+    Tenant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        plan: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+    AddMemberRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        display_name: { type: string }
+        subject: { type: string }
+        role: { type: string, enum: [owner, admin, editor, viewer] }
+    IssueKeyRequest:
+      type: object
+      required: [name, scopes]
+      properties:
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string, enum: [ingest, query, admin] }
+        expires_at: { type: string, format: date-time }
+    IssuedKey:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix: { type: string }
+        scopes: { type: array, items: { type: string } }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        key: { type: string, description: One-time plaintext; store securely }
+    VerifyKeyRequest:
+      type: object
+      required: [key, scope]
+      properties:
+        key: { type: string }
+        scope: { type: string, enum: [ingest, query, admin] }
+    VerifyKeyResponse:
+      type: object
+      properties:
+        tenant_id: { type: string, format: uuid }
+        key_id: { type: string, format: uuid }
+        scopes: { type: array, items: { type: string } }
