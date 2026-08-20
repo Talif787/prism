@@ -20,8 +20,8 @@ type CheckerFunc struct {
 	Fn          func(ctx context.Context) error
 }
 
-func (c CheckerFunc) Name() string                       { return c.CheckerName }
-func (c CheckerFunc) Check(ctx context.Context) error    { return c.Fn(ctx) }
+func (c CheckerFunc) Name() string                    { return c.CheckerName }
+func (c CheckerFunc) Check(ctx context.Context) error { return c.Fn(ctx) }
 
 // Health aggregates readiness checks. Liveness is intentionally trivial: the
 // process is alive if it can serve the endpoint. Readiness reflects dependencies.

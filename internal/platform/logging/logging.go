@@ -40,7 +40,9 @@ func parseLevel(level string) slog.Level {
 // present in the context, so logs correlate with distributed traces automatically.
 type traceHandler struct{ inner slog.Handler }
 
-func (h *traceHandler) Enabled(ctx context.Context, l slog.Level) bool { return h.inner.Enabled(ctx, l) }
+func (h *traceHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return h.inner.Enabled(ctx, l)
+}
 
 func (h *traceHandler) Handle(ctx context.Context, r slog.Record) error {
 	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {

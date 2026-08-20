@@ -28,7 +28,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		PermMemberManage: true, PermKeyManage: true, PermKeyRead: true,
 	},
 	RoleAdmin: {
-		PermTenantRead: true,
+		PermTenantRead:   true,
 		PermMemberManage: true, PermKeyManage: true, PermKeyRead: true,
 	},
 	RoleEditor: {PermTenantRead: true, PermKeyRead: true},

@@ -2,10 +2,10 @@ package domain
 
 import "time"
 
-// DomainEvent is a fact that has happened within the tenancy context. Events are
+// Event is a fact that has happened within the tenancy context. Events are
 // published through the outbox so downstream consumers (metering, audit) react
 // reliably without coupling to this context.
-type DomainEvent interface {
+type Event interface {
 	EventName() string
 	OccurredAt() time.Time
 }

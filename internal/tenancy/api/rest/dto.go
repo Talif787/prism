@@ -11,11 +11,11 @@ import (
 )
 
 type createTenantRequest struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Plan        string `json:"plan"`
-	OwnerEmail  string `json:"owner_email"`
-	OwnerName   string `json:"owner_name"`
+	Name         string `json:"name"`
+	Slug         string `json:"slug"`
+	Plan         string `json:"plan"`
+	OwnerEmail   string `json:"owner_email"`
+	OwnerName    string `json:"owner_name"`
 	OwnerSubject string `json:"owner_subject"`
 }
 

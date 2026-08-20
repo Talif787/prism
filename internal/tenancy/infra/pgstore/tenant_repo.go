@@ -36,9 +36,9 @@ func (r *TenantRepository) GetBySlug(ctx context.Context, slug string) (*domain.
 
 func (r *TenantRepository) scanOne(ctx context.Context, sql string, arg any) (*domain.Tenant, error) {
 	var (
-		t              domain.Tenant
-		idStr          string
-		plan, status   string
+		t            domain.Tenant
+		idStr        string
+		plan, status string
 	)
 	err := r.q.QueryRow(ctx, sql, arg).Scan(
 		&idStr, &t.Name, &t.Slug, &plan, &status, &t.CreatedAt, &t.UpdatedAt,
