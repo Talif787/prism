@@ -1,5 +1,6 @@
-# Phase 1 local stack: Postgres for the control plane and an OpenTelemetry
-# Collector plus Jaeger for traces. Later phases add Kafka, ClickHouse, and Redis.
+# Local development stack. Phase 1: Postgres + Jaeger + control plane. Phase 2
+# adds Redis, Redpanda (a single-container, Kafka-API-compatible broker that is
+# light enough for Cloud Shell), the ingest gateway, and the outbox relay.
 name: prism
 
 services:
@@ -19,6 +20,34 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --default-log-level=warn
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   jaeger:
     image: jaegertracing/all-in-one:1.60
     ports:
@@ -31,6 +60,8 @@ services:
     build:
       context: ..
       dockerfile: build/Dockerfile
+      args:
+        CMD: controlplane
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +79,59 @@ services:
       OTEL_SERVICE_NAME: prism-controlplane
     ports:
       - "8080:8080"
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        CMD: gateway
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      controlplane:
+        condition: service_started
+    environment:
+      APP_ENV: local
+      HTTP_PORT: "8090"
+      REDIS_ADDR: redis:6379
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_AUTO_CREATE_TOPICS: "true"
+      CONTROL_PLANE_VERIFY_URL: http://controlplane:8080/internal/v1/keys/verify
+      INTERNAL_API_TOKEN: local-internal-token-change-me
+      RATE_LIMIT_PER_SECOND: "50000"
+      RATE_LIMIT_BURST: "100000"
+      CARDINALITY_BUDGET: "100000"
+      CARDINALITY_ENFORCE: "false"
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-gateway
+    ports:
+      - "8090:8090"
+
+  relay:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        CMD: relay
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgres://prism:prism@postgres:5432/prism?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_AUTO_CREATE_TOPICS: "true"
+      RELAY_POLL_INTERVAL: 1s
+      RELAY_BATCH_SIZE: "100"
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-relay
 
 volumes:
   pgdata:
