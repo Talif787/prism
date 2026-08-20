@@ -57,7 +57,7 @@ func RequestID() Middleware {
 func Recover(logger *slog.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
+			defer func() { //nolint:contextcheck // the closure logs with the request context directly
 				if rec := recover(); rec != nil {
 					logger.ErrorContext(r.Context(), "panic recovered",
 						slog.Any("panic", rec),
