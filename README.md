@@ -3,7 +3,7 @@
 The control plane is the identity and access core of Prism, a multi-tenant
 observability platform. It owns tenants, users, memberships (RBAC), and API keys,
 and exposes an internal endpoint that the ingest and query gateways call to verify
-credentials. This repository is being built in phases; this is Phase 1.
+credentials. This repository is being built in phases; Phases 1 and 2 are in place.
 
 ## What is in Phase 1
 
@@ -65,13 +65,15 @@ make test-integration   # requires Docker
 
 ## Roadmap
 
-Phase 1 (this repo): control plane (tenancy, keys, RBAC).
-Phase 2: ingest gateway (OTLP receiver, rate limiting, cardinality guard) plus Redis and
-the Kafka outbox relay. Phase 3: stream consumer and ClickHouse writer. Phase 4: query
+Phase 1: control plane (tenancy, keys, RBAC).
+Phase 2 (current): ingest gateway (OTLP/HTTP receiver for metrics, logs, and traces,
+cached API-key auth, per-tenant Redis rate limiting, Redis HyperLogLog cardinality guard,
+Kafka production) plus the Kafka outbox relay. See `docs/INGEST.md`.
+Phase 3: OTLP/gRPC receiver, stream consumer, and ClickHouse writer. Phase 4: query
 service. Phase 5: alerting. Phase 6: metering and FinOps. Phase 7: Kubernetes, Helm,
 Terraform, CI/CD, and load and chaos testing.
 
 ## Note on dependency locking
 
-`go.sum` is intentionally not committed in this snapshot. Run `make tidy` once (it needs
-network access) to resolve and lock the module graph before the first build.
+`go.sum` is committed to lock the dependency graph. After changing dependencies, run
+`make tidy` to update `go.mod` and `go.sum`.

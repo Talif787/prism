@@ -12,12 +12,22 @@ tidy: ## Resolve and lock dependencies (requires network)
 	go mod tidy
 
 .PHONY: build
-build: ## Build the control-plane binary
-	CGO_ENABLED=0 go build -trimpath -o $(BIN) ./cmd/controlplane
+build: ## Build all service binaries (controlplane, gateway, relay)
+	CGO_ENABLED=0 go build -trimpath -o bin/controlplane ./cmd/controlplane
+	CGO_ENABLED=0 go build -trimpath -o bin/gateway ./cmd/gateway
+	CGO_ENABLED=0 go build -trimpath -o bin/relay ./cmd/relay
 
 .PHONY: run
 run: ## Run the control plane locally (expects .env exported)
 	go run ./cmd/controlplane
+
+.PHONY: run-gateway
+run-gateway: ## Run the ingest gateway locally (expects .env exported)
+	go run ./cmd/gateway
+
+.PHONY: run-relay
+run-relay: ## Run the outbox relay locally (expects .env exported)
+	go run ./cmd/relay
 
 .PHONY: test
 test: ## Run unit tests
