@@ -19,7 +19,7 @@ type fakeStore struct {
 	users       map[string]*domain.User
 	memberships map[string]domain.Membership // key: tenant|user
 	keys        map[string]*domain.APIKey
-	events      []domain.DomainEvent
+	events      []domain.Event
 }
 
 func newFakeStore() *fakeStore {
@@ -145,7 +145,7 @@ func (f *fakeStore) UpdateStatus(_ context.Context, id domain.APIKeyID, s domain
 func (f *fakeStore) TouchLastUsed(_ context.Context, _ domain.APIKeyID) error { return nil }
 
 // EventPublisher
-func (f *fakeStore) Publish(_ context.Context, events ...domain.DomainEvent) error {
+func (f *fakeStore) Publish(_ context.Context, events ...domain.Event) error {
 	f.events = append(f.events, events...)
 	return nil
 }
@@ -154,7 +154,9 @@ func (f *fakeStore) Publish(_ context.Context, events ...domain.DomainEvent) err
 // fake can satisfy APIKeyRepository without name collisions on Create/GetByID.
 type keyRepoAdapter struct{ f *fakeStore }
 
-func (a keyRepoAdapter) Create(ctx context.Context, k *domain.APIKey) error { return a.f.CreateKey(ctx, k) }
+func (a keyRepoAdapter) Create(ctx context.Context, k *domain.APIKey) error {
+	return a.f.CreateKey(ctx, k)
+}
 func (a keyRepoAdapter) GetByPrefix(ctx context.Context, p string) (*domain.APIKey, error) {
 	return a.f.GetByPrefix(ctx, p)
 }
@@ -174,8 +176,8 @@ func (a keyRepoAdapter) TouchLastUsed(ctx context.Context, id domain.APIKeyID) e
 // uowAdapter injects the key adapter into the Repositories bundle.
 type uowAdapter struct{ f *fakeStore }
 
-func (u uowAdapter) Do(ctx context.Context, fn func(Repositories) error) error {
-	return fn(Repositories{Tenants: u.f, Users: u.f, Keys: keyRepoAdapter{u.f}, Events: u.f})
+func (u uowAdapter) Do(_ context.Context, fn func(Repositories) error) error {
+	return fn(Repositories{Tenants: u.f, Users: u.f, Keys: keyRepoAdapter(u), Events: u.f})
 }
 
 func newTestService() (*Service, *fakeStore) {

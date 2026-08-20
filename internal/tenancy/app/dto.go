@@ -7,11 +7,11 @@ import (
 )
 
 type CreateTenantInput struct {
-	Name        string
-	Slug        string
-	Plan        domain.Plan
-	OwnerEmail  string
-	OwnerName   string
+	Name         string
+	Slug         string
+	Plan         domain.Plan
+	OwnerEmail   string
+	OwnerName    string
 	OwnerSubject string
 }
 

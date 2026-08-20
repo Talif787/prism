@@ -41,7 +41,7 @@ type APIKeyRepository interface {
 // EventPublisher records domain events for reliable downstream delivery. In
 // Phase 1 this writes to a transactional outbox; a relay ships them to Kafka.
 type EventPublisher interface {
-	Publish(ctx context.Context, events ...domain.DomainEvent) error
+	Publish(ctx context.Context, events ...domain.Event) error
 }
 
 // UnitOfWork runs a function within a single database transaction, giving each

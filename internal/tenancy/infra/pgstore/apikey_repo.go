@@ -88,13 +88,13 @@ type rowScanner interface {
 
 func scanKey(row rowScanner) (*domain.APIKey, error) {
 	var (
-		k           domain.APIKey
-		idStr       string
-		tenantStr   string
-		scopeStrs   []string
-		status      string
-		expiresAt   *time.Time
-		lastUsedAt  *time.Time
+		k          domain.APIKey
+		idStr      string
+		tenantStr  string
+		scopeStrs  []string
+		status     string
+		expiresAt  *time.Time
+		lastUsedAt *time.Time
 	)
 	if err := row.Scan(
 		&idStr, &tenantStr, &k.Name, &k.Prefix, &k.Hash,

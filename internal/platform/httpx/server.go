@@ -58,7 +58,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.logger.Info("shutdown signal received, draining connections")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 		defer cancel()
-		if err := s.srv.Shutdown(shutdownCtx); err != nil {
+		if err := s.srv.Shutdown(shutdownCtx); err != nil { //nolint:contextcheck // shutdown must use a fresh context: the parent ctx is already cancelled by the signal
 			return errors.Join(err, s.srv.Close())
 		}
 		return nil

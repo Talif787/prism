@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -29,12 +30,12 @@ const (
 )
 
 type Config struct {
-	Env    Environment
-	HTTP   HTTPConfig
-	Log    LogConfig
-	DB     DatabaseConfig
-	Auth   AuthConfig
-	OTel   OTelConfig
+	Env      Environment
+	HTTP     HTTPConfig
+	Log      LogConfig
+	DB       DatabaseConfig
+	Auth     AuthConfig
+	OTel     OTelConfig
 	Internal InternalConfig
 }
 
@@ -61,10 +62,10 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	Mode         AuthMode
+	Mode           AuthMode
 	DevHS256Secret string
-	OIDCIssuer   string
-	OIDCAudience string
+	OIDCIssuer     string
+	OIDCAudience   string
 }
 
 type InternalConfig struct {
@@ -72,10 +73,10 @@ type InternalConfig struct {
 }
 
 type OTelConfig struct {
-	Enabled       bool
-	ServiceName   string
-	OTLPEndpoint  string
-	SamplerRatio  float64
+	Enabled      bool
+	ServiceName  string
+	OTLPEndpoint string
+	SamplerRatio float64
 }
 
 // Load reads configuration from the environment and validates it. It returns an
@@ -101,8 +102,8 @@ func Load() (Config, error) {
 		},
 		DB: DatabaseConfig{
 			URL:             getStr("DATABASE_URL", ""),
-			MaxConns:        int32(getInt("DATABASE_MAX_CONNS", 20)),
-			MinConns:        int32(getInt("DATABASE_MIN_CONNS", 2)),
+			MaxConns:        getInt32("DATABASE_MAX_CONNS", 20),
+			MinConns:        getInt32("DATABASE_MIN_CONNS", 2),
 			ConnMaxLifetime: getDur("DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
 		},
 		Auth: AuthConfig{
@@ -170,6 +171,19 @@ func getInt(key string, def int) int {
 		}
 	}
 	return def
+}
+
+// getInt32 reads a bounded positive integer, clamping to the int32 range so the
+// conversion is provably safe (satisfies gosec G115). Values are small pool sizes.
+func getInt32(key string, def int32) int32 {
+	v := getInt(key, int(def))
+	if v < 1 {
+		return def
+	}
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(v)
 }
 
 func getFloat(key string, def float64) float64 {

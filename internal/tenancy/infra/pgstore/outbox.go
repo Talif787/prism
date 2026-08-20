@@ -23,7 +23,7 @@ type outboxPayload struct {
 	Data json.RawMessage `json:"data"`
 }
 
-func (p *OutboxPublisher) Publish(ctx context.Context, events ...domain.DomainEvent) error {
+func (p *OutboxPublisher) Publish(ctx context.Context, events ...domain.Event) error {
 	for _, ev := range events {
 		data, err := json.Marshal(ev)
 		if err != nil {

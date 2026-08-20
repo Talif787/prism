@@ -2,7 +2,7 @@
 
 # Multi-stage build: a cached module layer, a static binary, then a distroless
 # runtime. The final image contains no shell and runs as nonroot by default.
-FROM golang:1.23-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 
 RUN apk add --no-cache git ca-certificates
