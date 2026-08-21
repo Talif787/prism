@@ -1,0 +1,11 @@
+apiVersion: v2
+name: prism
+description: Prism, an observability and metrics SaaS. Deploys all seven backend services (control plane, ingest gateway, outbox relay, consumer, query, alerter, metering) with shared config and secrets, health-gated startup ordering, autoscaling, and optional in-cluster infrastructure for development.
+type: application
+version: 0.1.0
+appVersion: "0.7.0"
+home: https://github.com/Talif787/prism
+sources:
+  - https://github.com/Talif787/prism
+maintainers:
+  - name: Talif Pathan

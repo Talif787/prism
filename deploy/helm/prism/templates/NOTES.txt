@@ -1,0 +1,32 @@
+Prism {{ .Chart.AppVersion }} is installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Services (ClusterIP):
+{{- range $name, $svc := .Values.services }}
+{{- if and ($svc.enabled | default true) $svc.port }}
+  {{ include "prism.fullname" $ }}-{{ $name }}:{{ $svc.port }}
+{{- end }}
+{{- end }}
+
+Startup ordering is health-gated: the control plane applies Postgres migrations and
+the consumer applies the ClickHouse schema on startup, and dependents wait on their
+readiness via init containers. Give the stack a minute on first install.
+
+Smoke test the ingest path:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "prism.fullname" $ }}-controlplane 8080:8080 &
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "prism.fullname" $ }}-gateway 8090:8090 &
+
+Then create a tenant and an API key against localhost:8080, and post OTLP metrics to
+localhost:8090/v1/metrics. See docs/DEPLOYMENT.md for the full walkthrough.
+
+{{- if .Values.devInfra.enabled }}
+
+devInfra is ENABLED: in-cluster Postgres, ClickHouse, Redis, Redpanda, and Jaeger are
+running. Data is ephemeral (emptyDir) and is lost on pod restart. Do not use this for
+anything but development.
+{{- else }}
+
+devInfra is disabled: this release expects external data services. Confirm the
+endpoints and secrets values point at your managed Postgres, ClickHouse, Kafka, Redis,
+and collector.
+{{- end }}

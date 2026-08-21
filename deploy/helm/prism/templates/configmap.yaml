@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "prism.fullname" . }}-config
+  labels:
+    {{- include "prism.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ .Values.appEnv | quote }}
+  OTEL_ENABLED: {{ .Values.otel.enabled | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.endpoints.otel | default (printf "%s-jaeger:4317" (include "prism.fullname" .)) | quote }}
+  REDIS_ADDR: {{ .Values.endpoints.redis | default (printf "%s-redis:6379" (include "prism.fullname" .)) | quote }}
+  KAFKA_BROKERS: {{ .Values.endpoints.kafka | default (printf "%s-redpanda:9092" (include "prism.fullname" .)) | quote }}
+  KAFKA_AUTO_CREATE_TOPICS: {{ .Values.kafka.autoCreateTopics | quote }}
+  CLICKHOUSE_ADDR: {{ .Values.endpoints.clickhouse | default (printf "%s-clickhouse:9000" (include "prism.fullname" .)) | quote }}
+  CLICKHOUSE_DATABASE: {{ .Values.clickhouse.database | quote }}
+  CLICKHOUSE_USERNAME: {{ .Values.clickhouse.username | quote }}
+  CONTROL_PLANE_VERIFY_URL: {{ .Values.endpoints.controlPlaneVerifyURL | default (printf "http://%s-controlplane:8080/internal/v1/keys/verify" (include "prism.fullname" .)) | quote }}

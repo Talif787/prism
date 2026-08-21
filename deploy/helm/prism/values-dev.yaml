@@ -1,0 +1,49 @@
+# Development overlay: enables in-cluster infrastructure, uses locally built images
+# (prism-<service>:dev), single replicas, and a fast metering rollup so usage is
+# visible within a minute. Apply with:
+#   helm upgrade --install prism deploy/helm/prism -f deploy/helm/prism/values-dev.yaml
+
+appEnv: local
+
+image:
+  registry: ""        # locally built images, no registry prefix
+  repository: prism
+  tag: dev
+  pullPolicy: IfNotPresent
+
+devInfra:
+  enabled: true
+
+# Dev secrets matching the compose stack. Fine for a local cluster, never for shared.
+secrets:
+  internalApiToken: local-internal-token-change-me
+  authDevSecret: local-dev-secret-change-me
+
+services:
+  controlplane:
+    replicas: 1
+    pdb:
+      enabled: false
+  gateway:
+    replicas: 1
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+  consumer:
+    replicas: 1
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+  query:
+    replicas: 1
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+  metering:
+    env:
+      METERING_ROLLUP_INTERVAL: "1m"
+      METERING_ROLLUP_TICK: "15s"
+      METERING_BACKFILL: "24h"
