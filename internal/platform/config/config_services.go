@@ -260,3 +260,73 @@ func LoadConsumer() (ConsumerConfig, error) {
 	}
 	return cfg, nil
 }
+
+// --- Query service (read path over ClickHouse) ---
+
+type QueryConfig struct {
+	Env                 Environment
+	Log                 LogConfig
+	OTel                OTelConfig
+	HTTP                HTTPConfig
+	ClickHouse          ClickHouseConfig
+	Redis               RedisConfig
+	ControlPlane        ControlPlaneClientConfig
+	NameCacheTTL        time.Duration
+	MaxExecutionSeconds int
+}
+
+// LoadQuery reads and validates the query service configuration.
+func LoadQuery() (QueryConfig, error) {
+	var problems []string
+	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+
+	cfg := QueryConfig{
+		Env:  Environment(getStr("APP_ENV", string(EnvLocal))),
+		Log:  loadLog(),
+		OTel: loadOTel("prism-query"),
+		HTTP: HTTPConfig{
+			Host:            getStr("HTTP_HOST", "0.0.0.0"),
+			Port:            getInt("HTTP_PORT", 8092),
+			ReadTimeout:     getDur("HTTP_READ_TIMEOUT", 30*time.Second),
+			WriteTimeout:    getDur("HTTP_WRITE_TIMEOUT", 30*time.Second),
+			ShutdownTimeout: getDur("HTTP_SHUTDOWN_TIMEOUT", 15*time.Second),
+		},
+		ClickHouse: ClickHouseConfig{
+			Addr:         getStr("CLICKHOUSE_ADDR", "localhost:9000"),
+			Database:     getStr("CLICKHOUSE_DATABASE", "default"),
+			Username:     getStr("CLICKHOUSE_USERNAME", "default"),
+			Password:     getStr("CLICKHOUSE_PASSWORD", ""),
+			DialTimeout:  getDur("CLICKHOUSE_DIAL_TIMEOUT", 10*time.Second),
+			MaxOpenConns: getInt("CLICKHOUSE_MAX_OPEN_CONNS", 10),
+		},
+		Redis: RedisConfig{
+			Addr:     getStr("REDIS_ADDR", "localhost:6379"),
+			Password: getStr("REDIS_PASSWORD", ""),
+			DB:       getInt("REDIS_DB", 0),
+			PoolSize: getInt("REDIS_POOL_SIZE", 10),
+		},
+		ControlPlane: ControlPlaneClientConfig{
+			VerifyURL:        getStr("CONTROL_PLANE_VERIFY_URL", "http://localhost:8080/internal/v1/keys/verify"),
+			InternalToken:    getStr("INTERNAL_API_TOKEN", ""),
+			Timeout:          getDur("CONTROL_PLANE_TIMEOUT", 3*time.Second),
+			CacheTTL:         getDur("AUTH_CACHE_TTL", 60*time.Second),
+			NegativeCacheTTL: getDur("AUTH_NEGATIVE_CACHE_TTL", 10*time.Second),
+		},
+		NameCacheTTL:        getDur("QUERY_NAME_CACHE_TTL", 10*time.Second),
+		MaxExecutionSeconds: getInt("QUERY_MAX_EXECUTION_SECONDS", 15),
+	}
+
+	if cfg.ClickHouse.Addr == "" {
+		add("CLICKHOUSE_ADDR is required")
+	}
+	if cfg.Redis.Addr == "" {
+		add("REDIS_ADDR is required")
+	}
+	if cfg.ControlPlane.InternalToken == "" {
+		add("INTERNAL_API_TOKEN is required")
+	}
+	if len(problems) > 0 {
+		return QueryConfig{}, fmt.Errorf("invalid query configuration:\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return cfg, nil
+}

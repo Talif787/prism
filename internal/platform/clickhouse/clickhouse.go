@@ -20,6 +20,9 @@ type Config struct {
 	Password     string
 	DialTimeout  time.Duration
 	MaxOpenConns int
+	// Settings are ClickHouse session settings applied to every query on this
+	// connection, used by the read path to cap execution time and result size.
+	Settings map[string]any
 }
 
 // Conn wraps the driver connection so callers depend on this package rather than
@@ -30,7 +33,7 @@ type Conn struct {
 
 // New opens and verifies a ClickHouse connection, failing fast if unreachable.
 func New(ctx context.Context, cfg Config) (*Conn, error) {
-	conn, err := ch.Open(&ch.Options{
+	opts := &ch.Options{
 		Addr: []string{cfg.Addr},
 		Auth: ch.Auth{
 			Database: cfg.Database,
@@ -39,7 +42,11 @@ func New(ctx context.Context, cfg Config) (*Conn, error) {
 		},
 		DialTimeout:  orDefault(cfg.DialTimeout, 10*time.Second),
 		MaxOpenConns: orInt(cfg.MaxOpenConns, 10),
-	})
+	}
+	if len(cfg.Settings) > 0 {
+		opts.Settings = ch.Settings(cfg.Settings)
+	}
+	conn, err := ch.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("open clickhouse: %w", err)
 	}
