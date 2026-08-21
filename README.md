@@ -72,12 +72,16 @@ Kafka production) plus the Kafka outbox relay. See `docs/INGEST.md`.
 Phase 3: stream consumer and ClickHouse writer. Consumes telemetry from Kafka,
 transforms OTLP into columnar rows, and batch-writes metrics (gauge and sum), logs, and
 spans to ClickHouse with dedup and retention TTLs. See `docs/STORAGE.md`.
-Phase 4 (current): query service. A tenant-scoped read API over ClickHouse for metric
+Phase 4: query service. A tenant-scoped read API over ClickHouse for metric
 discovery, time-bucketed range queries, log search, and traces, with API-key auth, cost
 guards, and a discovery cache. See `docs/QUERY.md`.
-Phase 3b (current): OTLP/gRPC receiver on the gateway (port 4317), sharing the
+Phase 3b: OTLP/gRPC receiver on the gateway (port 4317), sharing the
 same pipeline as OTLP/HTTP. Most OpenTelemetry SDKs and Collectors default to gRPC.
-Phase 5: alerting. Phase 6: metering and FinOps. Phase 7: Kubernetes, Helm, Terraform,
+Phase 5 (current): alerting. A tenant-scoped service (port 8093) with a rule CRUD API,
+a background engine that evaluates threshold rules against ClickHouse through the
+pending, firing, and resolved state machine (honoring a "for" duration), and webhook
+notifications. Admin-scoped API keys. See `docs/ALERTING.md`.
+Phase 6: metering and FinOps. Phase 7: Kubernetes, Helm, Terraform,
 CI/CD, and load and chaos testing.
 
 Deferred: histogram and summary metric types (bucket-aware tables, a later phase); and, within Phase 4, a PromQL expression language and

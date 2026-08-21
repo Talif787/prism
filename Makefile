@@ -12,12 +12,13 @@ tidy: ## Resolve and lock dependencies (requires network)
 	go mod tidy
 
 .PHONY: build
-build: ## Build all service binaries (controlplane, gateway, relay, consumer, query)
+build: ## Build all service binaries (controlplane, gateway, relay, consumer, query, alerter)
 	CGO_ENABLED=0 go build -trimpath -o bin/controlplane ./cmd/controlplane
 	CGO_ENABLED=0 go build -trimpath -o bin/gateway ./cmd/gateway
 	CGO_ENABLED=0 go build -trimpath -o bin/relay ./cmd/relay
 	CGO_ENABLED=0 go build -trimpath -o bin/consumer ./cmd/consumer
 	CGO_ENABLED=0 go build -trimpath -o bin/query ./cmd/query
+	CGO_ENABLED=0 go build -trimpath -o bin/alerter ./cmd/alerter
 
 .PHONY: run
 run: ## Run the control plane locally (expects .env exported)
@@ -38,6 +39,10 @@ run-consumer: ## Run the stream consumer locally (expects .env exported)
 .PHONY: run-query
 run-query: ## Run the query service locally (expects .env exported)
 	go run ./cmd/query
+
+.PHONY: run-alerter
+run-alerter: ## Run the alerting service locally (expects .env exported)
+	go run ./cmd/alerter
 
 .PHONY: test
 test: ## Run unit tests
