@@ -1,0 +1,20 @@
+# Hypothesis: with more than one gateway replica (the production values run two or
+# more, and an HPA), making one gateway pod unavailable does not interrupt ingest.
+# The Service routes around the failed pod via readiness, and healthy replicas carry
+# the load. Observe: ingest success rate stays flat while one replica is down.
+# Note: run this against a release with gateway replicas >= 2 (the dev overlay uses
+# a single replica, which will show an outage instead, itself a useful contrast).
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: prism-gateway-pod-failure
+  namespace: prism
+spec:
+  action: pod-failure
+  mode: one
+  duration: "1m"
+  selector:
+    namespaces:
+      - prism
+    labelSelectors:
+      app.kubernetes.io/component: gateway

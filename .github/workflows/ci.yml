@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: Conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No em, en, or bar dashes
+        run: |
+          if git ls-files -z | xargs -0 grep -lF -e $'\u2014' -e $'\u2013' -e $'\u2015'; then
+            echo "Forbidden dash characters found in the files listed above."
+            exit 1
+          fi
+          echo "Clean: no em, en, or bar dashes."
+
+  go:
+    name: Go build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: test
+        run: go test ./...
+
+  helm:
+    name: Helm lint and template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.15.0
+      - name: lint
+        run: helm lint deploy/helm/prism -f deploy/helm/prism/values-dev.yaml
+      - name: template
+        run: helm template prism deploy/helm/prism -f deploy/helm/prism/values-dev.yaml > /dev/null
+
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: fmt
+        run: terraform -chdir=deploy/terraform fmt -check -recursive
+      - name: init
+        run: terraform -chdir=deploy/terraform init -backend=false
+      - name: validate
+        run: terraform -chdir=deploy/terraform validate
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [controlplane, gateway, relay, consumer, query, alerter, metering]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/Dockerfile
+          build-args: |
+            CMD=${{ matrix.service }}
+          push: false
+          tags: prism-${{ matrix.service }}:ci

@@ -1,0 +1,8 @@
+# Copy to backend.tf and set your bucket to store state remotely in GCS.
+# Create the bucket first: gsutil mb -l us-central1 gs://your-tfstate-bucket
+terraform {
+  backend "gcs" {
+    bucket = "your-tfstate-bucket"
+    prefix = "prism/terraform/state"
+  }
+}

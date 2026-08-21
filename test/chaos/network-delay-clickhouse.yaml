@@ -1,0 +1,23 @@
+# Hypothesis: added latency to ClickHouse degrades gracefully rather than failing.
+# The consumer write batching absorbs the delay, query p95 rises but requests still
+# complete within the query execution guard, and nothing crashes. Observe: no pod
+# restarts, query latency up but error rate flat, ingest lag recovers after the
+# experiment ends.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: prism-clickhouse-delay
+  namespace: prism
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - prism
+    labelSelectors:
+      app.kubernetes.io/component: clickhouse
+  delay:
+    latency: "200ms"
+    jitter: "50ms"
+    correlation: "50"
+  duration: "2m"
