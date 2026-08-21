@@ -1,0 +1,27 @@
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+{{- if and ($svc.enabled | default true) $svc.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "prism.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "prism.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "prism.selectorLabels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+    {{- range $p := $svc.extraPorts }}
+    - name: {{ $p.name }}
+      port: {{ $p.port }}
+      targetPort: {{ $p.name }}
+    {{- end }}
+{{- end }}
+{{- end }}

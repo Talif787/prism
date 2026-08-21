@@ -1,0 +1,232 @@
+# Default values for the Prism chart. These are production-leaning defaults: no
+# in-cluster infrastructure, endpoints expected to point at managed data services,
+# and placeholder secrets that must be overridden. For a self-contained local or
+# demo cluster, layer values-dev.yaml on top, which enables in-cluster infra and
+# dev credentials.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# APP_ENV shared by every service.
+appEnv: production
+
+# Container image. The final reference per service is:
+#   {registry}/{repository}-{service}:{tag}
+# for example ghcr.io/talif787/prism-controlplane:0.7.0. With an empty registry the
+# reference is {repository}-{service}:{tag}, which suits locally built dev images.
+image:
+  registry: ghcr.io/talif787
+  repository: prism
+  tag: ""            # empty means use the chart appVersion
+  pullPolicy: IfNotPresent
+
+# Image used by the wait-for-dependency init containers. Needs curl and a shell.
+waitImage: curlimages/curl:8.8.0
+
+serviceAccount:
+  create: true
+  name: ""
+
+otel:
+  enabled: true
+
+kafka:
+  autoCreateTopics: "true"
+
+clickhouse:
+  database: prism
+  username: prism
+  password: prism          # dev default; override in production
+
+# Infrastructure endpoints. Leave empty to default to the in-cluster service names
+# rendered by this release (which line up with the optional devInfra services).
+# Set these to managed endpoints (Cloud SQL, Memorystore, a managed ClickHouse and
+# Kafka, a collector) in production.
+endpoints:
+  redis: ""
+  kafka: ""
+  clickhouse: ""
+  otel: ""
+  controlPlaneVerifyURL: ""
+
+# Secret material. Override all of these in production, ideally from a secret manager
+# rather than values. databaseUrl empty defaults to the in-cluster Postgres.
+secrets:
+  databaseUrl: ""
+  internalApiToken: "change-me-internal-token"
+  authDevSecret: "change-me-dev-secret"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop: ["ALL"]
+
+defaults:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# The seven backend services. Each renders a Deployment, and (when it has a port) a
+# Service, optional HorizontalPodAutoscaler, and optional PodDisruptionBudget.
+#
+# relay, alerter, and metering run a single replica on purpose: each runs a
+# background loop (outbox publish, rule evaluation, usage rollup) that would
+# duplicate work or duplicate alert webhooks if run concurrently. Horizontal scaling
+# for them needs leader election (relay also needs SELECT ... FOR UPDATE SKIP LOCKED),
+# which is deferred.
+services:
+  controlplane:
+    enabled: true
+    cmd: controlplane
+    port: 8080
+    replicas: 2
+    waitFor: []
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+    env:
+      AUTH_MODE: dev
+
+  gateway:
+    enabled: true
+    cmd: gateway
+    port: 8090
+    replicas: 2
+    extraPorts:
+      - name: grpc
+        port: 4317
+    waitFor: [controlplane]
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+    env:
+      GATEWAY_GRPC_ENABLED: "true"
+      GRPC_PORT: "4317"
+      RATE_LIMIT_PER_SECOND: "50000"
+      RATE_LIMIT_BURST: "100000"
+      CARDINALITY_BUDGET: "100000"
+      CARDINALITY_ENFORCE: "false"
+
+  relay:
+    enabled: true
+    cmd: relay
+    replicas: 1
+    waitFor: [controlplane]
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+    env:
+      RELAY_POLL_INTERVAL: "1s"
+      RELAY_BATCH_SIZE: "100"
+
+  consumer:
+    enabled: true
+    cmd: consumer
+    port: 8091
+    replicas: 2
+    waitFor: []
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+    env:
+      KAFKA_CONSUMER_GROUP: prism-consumer
+      CONSUMER_BATCH_MAX_ROWS: "5000"
+      CONSUMER_BATCH_MAX_WAIT: "1s"
+
+  query:
+    enabled: true
+    cmd: query
+    port: 8092
+    replicas: 2
+    waitFor: [controlplane, consumer]
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+    env:
+      QUERY_MAX_EXECUTION_SECONDS: "15"
+
+  alerter:
+    enabled: true
+    cmd: alerter
+    port: 8093
+    replicas: 1
+    waitFor: [controlplane, consumer]
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+    env:
+      ALERTER_EVAL_INTERVAL: "15s"
+      ALERTER_WEBHOOK_TIMEOUT: "5s"
+      ALERTER_MAX_EXECUTION_SECONDS: "15"
+
+  metering:
+    enabled: true
+    cmd: metering
+    port: 8094
+    replicas: 1
+    waitFor: [controlplane, consumer]
+    autoscaling:
+      enabled: false
+    pdb:
+      enabled: false
+    env:
+      METERING_ROLLUP_INTERVAL: "1h"
+      METERING_ROLLUP_TICK: "5m"
+      METERING_BACKFILL: "168h"
+      METERING_MAX_EXECUTION_SECONDS: "30"
+
+# Optional in-cluster infrastructure for development and demos. Ephemeral (emptyDir),
+# single replica, no persistence. Disabled by default; enable with values-dev.yaml.
+# For anything beyond a demo, use managed data services and set endpoints above.
+devInfra:
+  enabled: false
+  postgres:
+    image: postgres:16-alpine
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+  redis:
+    image: redis:7-alpine
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+  jaeger:
+    image: jaegertracing/all-in-one:1.60

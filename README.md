@@ -81,11 +81,15 @@ Phase 5: alerting. A tenant-scoped service (port 8093) with a rule CRUD API,
 a background engine that evaluates threshold rules against ClickHouse through the
 pending, firing, and resolved state machine (honoring a "for" duration), and webhook
 notifications. Admin-scoped API keys. See `docs/ALERTING.md`.
-Phase 6 (current): metering and billing. A tenant-scoped service (port 8094) that
+Phase 6: metering and billing. A tenant-scoped service (port 8094) that
 rolls up accepted telemetry from ClickHouse into per-signal usage in Postgres, exposes
 usage, quota, and cost, and closes billing periods into invoices. Admin-scoped API
 keys. See `docs/METERING.md`.
-Phase 7: Kubernetes, Helm, Terraform, CI/CD, and load and chaos testing.
+Phase 7a (current): Kubernetes and Helm. A chart at `deploy/helm/prism` that deploys
+all seven services with shared config and secrets, health-gated startup ordering,
+autoscaling, disruption budgets, and optional in-cluster infrastructure for
+development. See `docs/DEPLOYMENT.md`.
+Phase 7b: Terraform provisioning, CI/CD pipeline, and load and chaos testing.
 
 Deferred: histogram and summary metric types (bucket-aware tables, a later phase); and, within Phase 4, a PromQL expression language and
 console-token auth for direct browser access (query keys are the machine path for now).

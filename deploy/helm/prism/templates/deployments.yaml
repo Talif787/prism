@@ -1,0 +1,115 @@
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled | default true }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "prism.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "prism.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if not $svc.autoscaling.enabled }}
+  replicas: {{ $svc.replicas | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "prism.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "prism.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+      annotations:
+        checksum/config: {{ include (print $root.Template.BasePath "/configmap.yaml") $root | sha256sum }}
+        checksum/secret: {{ include (print $root.Template.BasePath "/secret.yaml") $root | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "prism.serviceAccountName" $root }}
+      securityContext:
+        {{- toYaml $root.Values.podSecurityContext | nindent 8 }}
+      {{- with $svc.waitFor }}
+      initContainers:
+        {{- range $dep := . }}
+        - name: wait-for-{{ $dep }}
+          image: {{ $root.Values.waitImage }}
+          command:
+            - sh
+            - -c
+            - "until curl -fsS http://{{ include "prism.fullname" $root }}-{{ $dep }}:{{ (index $root.Values.services $dep).port }}/readyz; do echo waiting for {{ $dep }}; sleep 2; done"
+          securityContext:
+            {{- toYaml $root.Values.containerSecurityContext | nindent 12 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ if $root.Values.image.registry }}{{ $root.Values.image.registry }}/{{ end }}{{ $root.Values.image.repository }}-{{ $svc.cmd | default $name }}:{{ $svc.tag | default $root.Values.image.tag | default $root.Chart.AppVersion }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $root.Values.containerSecurityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "prism.fullname" $root }}-config
+            - secretRef:
+                name: {{ include "prism.fullname" $root }}-secret
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: prism-{{ $name }}
+            {{- if $svc.port }}
+            - name: HTTP_PORT
+              value: {{ $svc.port | quote }}
+            {{- end }}
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if or $svc.port $svc.extraPorts }}
+          ports:
+            {{- if $svc.port }}
+            - name: http
+              containerPort: {{ $svc.port }}
+            {{- end }}
+            {{- range $p := $svc.extraPorts }}
+            - name: {{ $p.name }}
+              containerPort: {{ $p.port }}
+            {{- end }}
+          {{- end }}
+          {{- if $svc.port }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 6
+          {{- end }}
+          resources:
+            {{- toYaml ($svc.resources | default $root.Values.defaults.resources) | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with $root.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
