@@ -336,3 +336,86 @@ func LoadQuery() (QueryConfig, error) {
 	}
 	return cfg, nil
 }
+
+// AlerterConfig configures the alerting service: the rule/alert HTTP API plus the
+// background evaluation loop. It reads rules from Postgres, metrics from
+// ClickHouse, caches auth in Redis, and verifies admin-scoped keys against the
+// control plane.
+type AlerterConfig struct {
+	Env                 Environment
+	Log                 LogConfig
+	OTel                OTelConfig
+	HTTP                HTTPConfig
+	DB                  DatabaseConfig
+	ClickHouse          ClickHouseConfig
+	Redis               RedisConfig
+	ControlPlane        ControlPlaneClientConfig
+	EvalInterval        time.Duration
+	WebhookTimeout      time.Duration
+	MaxExecutionSeconds int
+}
+
+func LoadAlerter() (AlerterConfig, error) {
+	var problems []string
+	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+
+	cfg := AlerterConfig{
+		Env:  Environment(getStr("APP_ENV", string(EnvLocal))),
+		Log:  loadLog(),
+		OTel: loadOTel("prism-alerter"),
+		HTTP: HTTPConfig{
+			Host:            getStr("HTTP_HOST", "0.0.0.0"),
+			Port:            getInt("HTTP_PORT", 8093),
+			ReadTimeout:     getDur("HTTP_READ_TIMEOUT", 30*time.Second),
+			WriteTimeout:    getDur("HTTP_WRITE_TIMEOUT", 30*time.Second),
+			ShutdownTimeout: getDur("HTTP_SHUTDOWN_TIMEOUT", 15*time.Second),
+		},
+		DB: DatabaseConfig{
+			URL:             getStr("DATABASE_URL", ""),
+			MaxConns:        getInt32("DATABASE_MAX_CONNS", 5),
+			MinConns:        getInt32("DATABASE_MIN_CONNS", 1),
+			ConnMaxLifetime: getDur("DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
+		},
+		ClickHouse: ClickHouseConfig{
+			Addr:         getStr("CLICKHOUSE_ADDR", "localhost:9000"),
+			Database:     getStr("CLICKHOUSE_DATABASE", "default"),
+			Username:     getStr("CLICKHOUSE_USERNAME", "default"),
+			Password:     getStr("CLICKHOUSE_PASSWORD", ""),
+			DialTimeout:  getDur("CLICKHOUSE_DIAL_TIMEOUT", 10*time.Second),
+			MaxOpenConns: getInt("CLICKHOUSE_MAX_OPEN_CONNS", 10),
+		},
+		Redis: RedisConfig{
+			Addr:     getStr("REDIS_ADDR", "localhost:6379"),
+			Password: getStr("REDIS_PASSWORD", ""),
+			DB:       getInt("REDIS_DB", 0),
+			PoolSize: getInt("REDIS_POOL_SIZE", 10),
+		},
+		ControlPlane: ControlPlaneClientConfig{
+			VerifyURL:        getStr("CONTROL_PLANE_VERIFY_URL", "http://localhost:8080/internal/v1/keys/verify"),
+			InternalToken:    getStr("INTERNAL_API_TOKEN", ""),
+			Timeout:          getDur("CONTROL_PLANE_TIMEOUT", 3*time.Second),
+			CacheTTL:         getDur("AUTH_CACHE_TTL", 60*time.Second),
+			NegativeCacheTTL: getDur("AUTH_NEGATIVE_CACHE_TTL", 10*time.Second),
+		},
+		EvalInterval:        getDur("ALERTER_EVAL_INTERVAL", 15*time.Second),
+		WebhookTimeout:      getDur("ALERTER_WEBHOOK_TIMEOUT", 5*time.Second),
+		MaxExecutionSeconds: getInt("ALERTER_MAX_EXECUTION_SECONDS", 15),
+	}
+
+	if cfg.DB.URL == "" {
+		add("DATABASE_URL is required")
+	}
+	if cfg.ClickHouse.Addr == "" {
+		add("CLICKHOUSE_ADDR is required")
+	}
+	if cfg.Redis.Addr == "" {
+		add("REDIS_ADDR is required")
+	}
+	if cfg.ControlPlane.InternalToken == "" {
+		add("INTERNAL_API_TOKEN is required")
+	}
+	if len(problems) > 0 {
+		return AlerterConfig{}, fmt.Errorf("invalid alerter configuration:\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return cfg, nil
+}

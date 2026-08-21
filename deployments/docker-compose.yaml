@@ -213,6 +213,40 @@ services:
       OTEL_SERVICE_NAME: prism-query
     ports:
     - "8092:8092"
+  alerter:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        CMD: alerter
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      controlplane:
+        condition: service_started
+    environment:
+      APP_ENV: local
+      HTTP_PORT: '8093'
+      DATABASE_URL: postgres://prism:prism@postgres:5432/prism?sslmode=disable
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DATABASE: prism
+      CLICKHOUSE_USERNAME: prism
+      CLICKHOUSE_PASSWORD: prism
+      REDIS_ADDR: redis:6379
+      CONTROL_PLANE_VERIFY_URL: http://controlplane:8080/internal/v1/keys/verify
+      INTERNAL_API_TOKEN: local-internal-token-change-me
+      ALERTER_EVAL_INTERVAL: 15s
+      ALERTER_WEBHOOK_TIMEOUT: 5s
+      ALERTER_MAX_EXECUTION_SECONDS: '15'
+      OTEL_ENABLED: 'true'
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-alerter
+    ports:
+    - "8093:8093"
 volumes:
   pgdata: null
   chdata: null
