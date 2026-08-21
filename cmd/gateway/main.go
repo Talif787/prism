@@ -8,12 +8,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+
+	"github.com/Talif787/prism/internal/ingest/api/otlpgrpc"
 	"github.com/Talif787/prism/internal/ingest/api/otlphttp"
 	"github.com/Talif787/prism/internal/ingest/app"
 	"github.com/Talif787/prism/internal/ingest/infra/authcache"
@@ -124,10 +128,54 @@ func run() error {
 		WriteTimeout: cfg.HTTP.WriteTimeout, ShutdownTimeout: cfg.HTTP.ShutdownTimeout,
 	}, root, logger)
 
+	// Optionally start the OTLP/gRPC receiver on its own listener, sharing the
+	// same pipeline. Bind eagerly so a port conflict fails fast before serving.
+	var grpcServer *grpc.Server
+	var grpcLis net.Listener
+	if cfg.GRPC.Enabled {
+		grpcLis, err = net.Listen("tcp", cfg.GRPC.Addr())
+		if err != nil {
+			return fmt.Errorf("listen grpc: %w", err)
+		}
+		grpcServer = grpc.NewServer(grpc.MaxRecvMsgSize(int(cfg.Limits.MaxBodyBytes)))
+		otlpgrpc.Register(grpcServer, pipeline, logger)
+	}
+
 	logger.Info("gateway starting",
 		slog.String("env", string(cfg.Env)),
-		slog.String("addr", cfg.HTTP.Addr()),
+		slog.String("http_addr", cfg.HTTP.Addr()),
+		slog.String("grpc_addr", grpcAddr(cfg)),
 		slog.Bool("cardinality_enforced", cfg.Limits.EnforceCardinality),
 	)
-	return server.Run(ctx)
+
+	// Run both servers. The first to exit (ctx cancel drives both) yields the
+	// result; then ensure the gRPC server is stopped.
+	errCh := make(chan error, 2)
+	go func() { errCh <- server.Run(ctx) }()
+	if grpcServer != nil {
+		go func() {
+			if serveErr := grpcServer.Serve(grpcLis); serveErr != nil {
+				errCh <- fmt.Errorf("grpc serve: %w", serveErr)
+				return
+			}
+			errCh <- nil
+		}()
+		go func() {
+			<-ctx.Done()
+			grpcServer.GracefulStop()
+		}()
+	}
+
+	runErr := <-errCh
+	if grpcServer != nil {
+		grpcServer.GracefulStop()
+	}
+	return runErr
+}
+
+func grpcAddr(cfg config.GatewayConfig) string {
+	if !cfg.GRPC.Enabled {
+		return "disabled"
+	}
+	return cfg.GRPC.Addr()
 }
