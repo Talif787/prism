@@ -419,3 +419,112 @@ func LoadAlerter() (AlerterConfig, error) {
 	}
 	return cfg, nil
 }
+
+// MeteringConfig configures the metering and billing service: the usage and invoice
+// HTTP API plus the background rollup loop. It reads accepted-telemetry counts from
+// ClickHouse, writes rollups and invoices to Postgres, caches auth in Redis, and
+// verifies admin-scoped keys against the control plane. Pricing and per-plan quotas
+// are supplied as scalars and assembled into domain types by the service.
+type MeteringConfig struct {
+	Env          Environment
+	Log          LogConfig
+	OTel         OTelConfig
+	HTTP         HTTPConfig
+	DB           DatabaseConfig
+	ClickHouse   ClickHouseConfig
+	Redis        RedisConfig
+	ControlPlane ControlPlaneClientConfig
+
+	RollupInterval      time.Duration
+	RollupTick          time.Duration
+	Backfill            time.Duration
+	MaxExecutionSeconds int
+
+	Currency         string
+	PriceMetricsPerM float64
+	PriceLogsPerM    float64
+	PriceTracesPerM  float64
+
+	QuotaFree       int64
+	QuotaTeam       int64
+	QuotaEnterprise int64
+}
+
+func LoadMetering() (MeteringConfig, error) {
+	var problems []string
+	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+
+	cfg := MeteringConfig{
+		Env:  Environment(getStr("APP_ENV", string(EnvLocal))),
+		Log:  loadLog(),
+		OTel: loadOTel("prism-metering"),
+		HTTP: HTTPConfig{
+			Host:            getStr("HTTP_HOST", "0.0.0.0"),
+			Port:            getInt("HTTP_PORT", 8094),
+			ReadTimeout:     getDur("HTTP_READ_TIMEOUT", 30*time.Second),
+			WriteTimeout:    getDur("HTTP_WRITE_TIMEOUT", 30*time.Second),
+			ShutdownTimeout: getDur("HTTP_SHUTDOWN_TIMEOUT", 15*time.Second),
+		},
+		DB: DatabaseConfig{
+			URL:             getStr("DATABASE_URL", ""),
+			MaxConns:        getInt32("DATABASE_MAX_CONNS", 5),
+			MinConns:        getInt32("DATABASE_MIN_CONNS", 1),
+			ConnMaxLifetime: getDur("DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
+		},
+		ClickHouse: ClickHouseConfig{
+			Addr:         getStr("CLICKHOUSE_ADDR", "localhost:9000"),
+			Database:     getStr("CLICKHOUSE_DATABASE", "default"),
+			Username:     getStr("CLICKHOUSE_USERNAME", "default"),
+			Password:     getStr("CLICKHOUSE_PASSWORD", ""),
+			DialTimeout:  getDur("CLICKHOUSE_DIAL_TIMEOUT", 10*time.Second),
+			MaxOpenConns: getInt("CLICKHOUSE_MAX_OPEN_CONNS", 10),
+		},
+		Redis: RedisConfig{
+			Addr:     getStr("REDIS_ADDR", "localhost:6379"),
+			Password: getStr("REDIS_PASSWORD", ""),
+			DB:       getInt("REDIS_DB", 0),
+			PoolSize: getInt("REDIS_POOL_SIZE", 10),
+		},
+		ControlPlane: ControlPlaneClientConfig{
+			VerifyURL:        getStr("CONTROL_PLANE_VERIFY_URL", "http://localhost:8080/internal/v1/keys/verify"),
+			InternalToken:    getStr("INTERNAL_API_TOKEN", ""),
+			Timeout:          getDur("CONTROL_PLANE_TIMEOUT", 3*time.Second),
+			CacheTTL:         getDur("AUTH_CACHE_TTL", 60*time.Second),
+			NegativeCacheTTL: getDur("AUTH_NEGATIVE_CACHE_TTL", 10*time.Second),
+		},
+
+		RollupInterval:      getDur("METERING_ROLLUP_INTERVAL", time.Hour),
+		RollupTick:          getDur("METERING_ROLLUP_TICK", 5*time.Minute),
+		Backfill:            getDur("METERING_BACKFILL", 168*time.Hour),
+		MaxExecutionSeconds: getInt("METERING_MAX_EXECUTION_SECONDS", 30),
+
+		Currency:         getStr("METERING_CURRENCY", "USD"),
+		PriceMetricsPerM: getFloat("METERING_PRICE_METRICS_PER_M", 0.10),
+		PriceLogsPerM:    getFloat("METERING_PRICE_LOGS_PER_M", 0.50),
+		PriceTracesPerM:  getFloat("METERING_PRICE_TRACES_PER_M", 0.20),
+
+		QuotaFree:       int64(getInt("METERING_QUOTA_FREE", 10_000_000)),
+		QuotaTeam:       int64(getInt("METERING_QUOTA_TEAM", 1_000_000_000)),
+		QuotaEnterprise: int64(getInt("METERING_QUOTA_ENTERPRISE", -1)),
+	}
+
+	if cfg.DB.URL == "" {
+		add("DATABASE_URL is required")
+	}
+	if cfg.ClickHouse.Addr == "" {
+		add("CLICKHOUSE_ADDR is required")
+	}
+	if cfg.Redis.Addr == "" {
+		add("REDIS_ADDR is required")
+	}
+	if cfg.ControlPlane.InternalToken == "" {
+		add("INTERNAL_API_TOKEN is required")
+	}
+	if cfg.RollupInterval < time.Second {
+		add("METERING_ROLLUP_INTERVAL must be at least 1s")
+	}
+	if len(problems) > 0 {
+		return MeteringConfig{}, fmt.Errorf("invalid metering configuration:\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return cfg, nil
+}

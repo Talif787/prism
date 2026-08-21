@@ -247,6 +247,41 @@ services:
       OTEL_SERVICE_NAME: prism-alerter
     ports:
     - "8093:8093"
+  metering:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        CMD: metering
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      controlplane:
+        condition: service_started
+    environment:
+      APP_ENV: local
+      HTTP_PORT: '8094'
+      DATABASE_URL: postgres://prism:prism@postgres:5432/prism?sslmode=disable
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DATABASE: prism
+      CLICKHOUSE_USERNAME: prism
+      CLICKHOUSE_PASSWORD: prism
+      REDIS_ADDR: redis:6379
+      CONTROL_PLANE_VERIFY_URL: http://controlplane:8080/internal/v1/keys/verify
+      INTERNAL_API_TOKEN: local-internal-token-change-me
+      METERING_ROLLUP_INTERVAL: 1m
+      METERING_ROLLUP_TICK: 15s
+      METERING_BACKFILL: 24h
+      METERING_MAX_EXECUTION_SECONDS: '30'
+      OTEL_ENABLED: 'true'
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-metering
+    ports:
+    - "8094:8094"
 volumes:
   pgdata: null
   chdata: null
