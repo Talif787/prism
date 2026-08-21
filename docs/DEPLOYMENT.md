@@ -165,11 +165,36 @@ helm uninstall prism -n prism
 kubectl delete namespace prism
 ```
 
-## Deferred to Phase 7b
+## Provisioning with Terraform
 
-Terraform to provision GKE and managed data services; the CI/CD pipeline that
-builds, tests, and publishes the images and enforces the repository conventions
-(including the no-dash rule); a load-testing harness; and chaos experiments that
-validate the resilience claims (consumer pod kills, broker and database latency
-injection). A network policy for default-deny east-west traffic is also a natural
-follow-up.
+The chart assumes a cluster and data services already exist. `deploy/terraform`
+provisions them on GCP: a VPC-native GKE cluster with a managed, autoscaling node
+pool, and optionally Cloud SQL Postgres and Memorystore Redis on private IPs, with
+outputs (a `database_url`, a `redis_addr`, and a kubeconfig command) that wire
+straight into the chart's secrets and endpoints. ClickHouse, Redpanda, and Jaeger
+stay in-cluster. See `deploy/terraform/README.md` for the apply, wiring, and teardown
+steps, and the cost warning.
+
+## Continuous integration and delivery
+
+`.github/workflows/ci.yml` runs on every pull request and push to main: Go build,
+test, `gofmt`, and `go vet`; `helm lint` and a full template render; `terraform fmt`,
+`init`, and `validate`; a Docker build matrix over all seven services; and a
+conventions job that fails the build if any forbidden dash character is present, so
+the repository's no-dash rule is enforced automatically. `.github/workflows/release.yml`
+runs on a `v*` tag and builds and pushes each service image to GHCR
+(`ghcr.io/<owner>/prism-<service>`), tagged with the semantic version and `latest`.
+
+## Load and chaos testing
+
+Operational test suites live under `test/`. `test/load` drives the ingest and query
+paths with k6 under latency and error-rate thresholds; `test/chaos` injects faults
+with Chaos Mesh to validate specific resilience claims (consumer pod kill, ClickHouse
+latency, gateway pod failure). See `docs/TESTING.md`.
+
+## Further hardening
+
+A default-deny network policy for east-west traffic, a private GKE control plane with
+Cloud NAT for egress, leader election so the singleton loops (relay, alerter,
+metering) can scale, and sourcing secrets from Secret Manager rather than values are
+all natural next steps beyond this backend.

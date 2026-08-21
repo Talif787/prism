@@ -1,0 +1,19 @@
+# Hypothesis: killing a consumer pod does not lose data. The consumer group
+# rebalances, and on restart the consumer resumes from its last committed Kafka
+# offset. Any rows re-processed from an uncommitted batch are deduplicated by the
+# ReplacingMergeTree tables, so at-least-once redelivery does not double-count in
+# reads. Observe: ingest continues, and query totals match what was sent once the
+# consumer is back.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: prism-consumer-pod-kill
+  namespace: prism
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - prism
+    labelSelectors:
+      app.kubernetes.io/component: consumer

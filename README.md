@@ -85,11 +85,17 @@ Phase 6: metering and billing. A tenant-scoped service (port 8094) that
 rolls up accepted telemetry from ClickHouse into per-signal usage in Postgres, exposes
 usage, quota, and cost, and closes billing periods into invoices. Admin-scoped API
 keys. See `docs/METERING.md`.
-Phase 7a (current): Kubernetes and Helm. A chart at `deploy/helm/prism` that deploys
+Phase 7a: Kubernetes and Helm. A chart at `deploy/helm/prism` that deploys
 all seven services with shared config and secrets, health-gated startup ordering,
 autoscaling, disruption budgets, and optional in-cluster infrastructure for
 development. See `docs/DEPLOYMENT.md`.
-Phase 7b: Terraform provisioning, CI/CD pipeline, and load and chaos testing.
+Phase 7b: Terraform provisioning (GKE, Cloud SQL, Memorystore), a CI/CD pipeline
+(build, test, helm lint, terraform validate, image publish, and no-dash enforcement),
+and load and chaos testing. See `deploy/terraform/README.md` and `docs/TESTING.md`.
+
+The backend is now complete end to end: control plane, ingest, storage, query,
+alerting, metering and billing, and the deployment, provisioning, delivery, and
+testing around them.
 
 Deferred: histogram and summary metric types (bucket-aware tables, a later phase); and, within Phase 4, a PromQL expression language and
 console-token auth for direct browser access (query keys are the machine path for now).
