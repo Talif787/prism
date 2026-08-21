@@ -184,6 +184,36 @@ services:
     ports:
       - "8091:8091"
 
+  query:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        CMD: query
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      controlplane:
+        condition: service_started
+    environment:
+      APP_ENV: local
+      HTTP_PORT: "8092"
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DATABASE: prism
+      CLICKHOUSE_USERNAME: prism
+      CLICKHOUSE_PASSWORD: prism
+      REDIS_ADDR: redis:6379
+      CONTROL_PLANE_VERIFY_URL: http://controlplane:8080/internal/v1/keys/verify
+      INTERNAL_API_TOKEN: local-internal-token-change-me
+      QUERY_MAX_EXECUTION_SECONDS: "15"
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-query
+    ports:
+      - "8092:8092"
+
 volumes:
   pgdata:
   chdata:
