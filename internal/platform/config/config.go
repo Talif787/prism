@@ -49,6 +49,16 @@ type HTTPConfig struct {
 
 func (h HTTPConfig) Addr() string { return fmt.Sprintf("%s:%d", h.Host, h.Port) }
 
+// GRPCConfig configures a gRPC listener. Enabled lets a deployment turn the
+// transport off; the ingest gateway uses this for its OTLP/gRPC receiver.
+type GRPCConfig struct {
+	Enabled bool
+	Host    string
+	Port    int
+}
+
+func (g GRPCConfig) Addr() string { return fmt.Sprintf("%s:%d", g.Host, g.Port) }
+
 type LogConfig struct {
 	Level  string
 	Format string

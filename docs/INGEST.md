@@ -137,3 +137,42 @@ See the Phase 2 section of `.env.example` for the full list. Key variables:
 OTLP/gRPC ingestion is deferred. It reuses this exact pipeline (authenticate,
 rate limit, cardinality, produce); only the transport differs, so it is purely
 additive. It lands alongside the stream consumer and ClickHouse writer.
+
+## OTLP/gRPC (Phase 3b)
+
+The gateway serves OTLP/gRPC on port 4317 alongside OTLP/HTTP, for the many
+OpenTelemetry SDKs and Collectors that default to gRPC. Both transports share one
+pipeline: authenticate the API key, enforce the per-tenant rate and cardinality
+limits, and produce protobuf to Kafka. The gRPC path adds no new pipeline logic;
+it marshals the received export request to protobuf and reuses the same domain
+point-counting and fingerprinting as the HTTP path, so a metric ingested over gRPC
+is indistinguishable downstream from the same metric ingested over HTTP.
+
+Services implemented: the standard OTLP MetricsService, LogsService, and
+TraceService Export methods. Gzip-compressed requests are accepted (the gzip
+encoding is registered on the server). The maximum received message size matches
+the HTTP body limit.
+
+Authentication uses gRPC metadata, either `authorization: Bearer <key>` or
+`x-prism-key: <key>`, both settable through `OTEL_EXPORTER_OTLP_HEADERS`. Pipeline
+outcomes map to gRPC status codes: an invalid key is Unauthenticated, a key
+without the ingest scope is PermissionDenied, and rate-limit or cardinality
+rejection is ResourceExhausted. A successful export returns an empty response
+(full success); partial-success reporting is a later addition.
+
+The transport can be turned off with `GATEWAY_GRPC_ENABLED=false`.
+
+Deferred: TLS and mTLS on the listener (plaintext locally, like the HTTP path;
+termination belongs at the ingress in Phase 7), gRPC health and reflection
+services, and partial-success reporting of rejected points.
+
+### Sending OTLP/gRPC
+
+Any OpenTelemetry SDK or the Collector's otlp exporter works. Point it at the
+gateway and pass the key as a header:
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_HEADERS=x-prism-key=<your ingest key>
+```

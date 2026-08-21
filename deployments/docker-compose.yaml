@@ -1,8 +1,4 @@
-# Local development stack. Phase 1: Postgres + Jaeger + control plane. Phase 2
-# adds Redis, Redpanda (a single-container, Kafka-API-compatible broker that is
-# light enough for Cloud Shell), the ingest gateway, and the outbox relay.
 name: prism
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,51 +7,54 @@ services:
       POSTGRES_PASSWORD: prism
       POSTGRES_DB: prism
     ports:
-      - "5432:5432"
+    - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+    - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U prism"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U prism
       interval: 5s
       timeout: 3s
       retries: 10
-
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+    - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 5s
       timeout: 3s
       retries: 10
-
   redpanda:
     image: redpandadata/redpanda:v24.2.7
     command:
-      - redpanda
-      - start
-      - --mode=dev-container
-      - --smp=1
-      - --default-log-level=warn
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    - redpanda
+    - start
+    - --mode=dev-container
+    - --smp=1
+    - --default-log-level=warn
+    - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+    - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
     ports:
-      - "9092:9092"
+    - "9092:9092"
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      test:
+      - CMD-SHELL
+      - rpk cluster health | grep -q 'Healthy:.*true'
       interval: 10s
       timeout: 5s
       retries: 12
-
   jaeger:
     image: jaegertracing/all-in-one:1.60
     ports:
-      - "16686:16686"   # UI
-      - "4317:4317"     # OTLP gRPC
+    - "16686:16686"
+    - "4327:4317"
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-
+      COLLECTOR_OTLP_ENABLED: 'true'
   controlplane:
     build:
       context: ..
@@ -69,17 +68,16 @@ services:
         condition: service_started
     environment:
       APP_ENV: local
-      HTTP_PORT: "8080"
+      HTTP_PORT: '8080'
       DATABASE_URL: postgres://prism:prism@postgres:5432/prism?sslmode=disable
       AUTH_MODE: dev
       AUTH_DEV_HS256_SECRET: local-dev-secret-change-me
       INTERNAL_API_TOKEN: local-internal-token-change-me
-      OTEL_ENABLED: "true"
+      OTEL_ENABLED: 'true'
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_SERVICE_NAME: prism-controlplane
     ports:
-      - "8080:8080"
-
+    - "8080:8080"
   gateway:
     build:
       context: ..
@@ -95,22 +93,24 @@ services:
         condition: service_started
     environment:
       APP_ENV: local
-      HTTP_PORT: "8090"
+      HTTP_PORT: '8090'
       REDIS_ADDR: redis:6379
       KAFKA_BROKERS: redpanda:9092
-      KAFKA_AUTO_CREATE_TOPICS: "true"
+      KAFKA_AUTO_CREATE_TOPICS: 'true'
       CONTROL_PLANE_VERIFY_URL: http://controlplane:8080/internal/v1/keys/verify
       INTERNAL_API_TOKEN: local-internal-token-change-me
-      RATE_LIMIT_PER_SECOND: "50000"
-      RATE_LIMIT_BURST: "100000"
-      CARDINALITY_BUDGET: "100000"
-      CARDINALITY_ENFORCE: "false"
-      OTEL_ENABLED: "true"
+      RATE_LIMIT_PER_SECOND: '50000'
+      RATE_LIMIT_BURST: '100000'
+      CARDINALITY_BUDGET: '100000'
+      CARDINALITY_ENFORCE: 'false'
+      OTEL_ENABLED: 'true'
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_SERVICE_NAME: prism-gateway
+      GATEWAY_GRPC_ENABLED: 'true'
+      GRPC_PORT: '4317'
     ports:
-      - "8090:8090"
-
+    - "8090:8090"
+    - "4317:4317"
   relay:
     build:
       context: ..
@@ -126,35 +126,36 @@ services:
       APP_ENV: local
       DATABASE_URL: postgres://prism:prism@postgres:5432/prism?sslmode=disable
       KAFKA_BROKERS: redpanda:9092
-      KAFKA_AUTO_CREATE_TOPICS: "true"
+      KAFKA_AUTO_CREATE_TOPICS: 'true'
       RELAY_POLL_INTERVAL: 1s
-      RELAY_BATCH_SIZE: "100"
-      OTEL_ENABLED: "true"
+      RELAY_BATCH_SIZE: '100'
+      OTEL_ENABLED: 'true'
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_SERVICE_NAME: prism-relay
-
   clickhouse:
     image: clickhouse/clickhouse-server:24.8-alpine
     environment:
       CLICKHOUSE_DB: prism
       CLICKHOUSE_USER: prism
       CLICKHOUSE_PASSWORD: prism
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: '1'
     ports:
-      - "8123:8123"   # HTTP
-      - "9000:9000"   # native protocol
+    - "8123:8123"
+    - "9000:9000"
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
     volumes:
-      - chdata:/var/lib/clickhouse
+    - chdata:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --user prism --password prism --query 'SELECT 1' || exit 1"]
+      test:
+      - CMD-SHELL
+      - clickhouse-client --user prism --password prism --query 'SELECT 1' || exit
+        1
       interval: 10s
       timeout: 5s
       retries: 12
-
   consumer:
     build:
       context: ..
@@ -168,22 +169,21 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: local
-      HTTP_PORT: "8091"
+      HTTP_PORT: '8091'
       KAFKA_BROKERS: redpanda:9092
-      KAFKA_AUTO_CREATE_TOPICS: "true"
+      KAFKA_AUTO_CREATE_TOPICS: 'true'
       KAFKA_CONSUMER_GROUP: prism-consumer
       CLICKHOUSE_ADDR: clickhouse:9000
       CLICKHOUSE_DATABASE: prism
       CLICKHOUSE_USERNAME: prism
       CLICKHOUSE_PASSWORD: prism
-      CONSUMER_BATCH_MAX_ROWS: "5000"
+      CONSUMER_BATCH_MAX_ROWS: '5000'
       CONSUMER_BATCH_MAX_WAIT: 1s
-      OTEL_ENABLED: "true"
+      OTEL_ENABLED: 'true'
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_SERVICE_NAME: prism-consumer
     ports:
-      - "8091:8091"
-
+    - "8091:8091"
   query:
     build:
       context: ..
@@ -199,7 +199,7 @@ services:
         condition: service_started
     environment:
       APP_ENV: local
-      HTTP_PORT: "8092"
+      HTTP_PORT: '8092'
       CLICKHOUSE_ADDR: clickhouse:9000
       CLICKHOUSE_DATABASE: prism
       CLICKHOUSE_USERNAME: prism
@@ -207,13 +207,12 @@ services:
       REDIS_ADDR: redis:6379
       CONTROL_PLANE_VERIFY_URL: http://controlplane:8080/internal/v1/keys/verify
       INTERNAL_API_TOKEN: local-internal-token-change-me
-      QUERY_MAX_EXECUTION_SECONDS: "15"
-      OTEL_ENABLED: "true"
+      QUERY_MAX_EXECUTION_SECONDS: '15'
+      OTEL_ENABLED: 'true'
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_SERVICE_NAME: prism-query
     ports:
-      - "8092:8092"
-
+    - "8092:8092"
 volumes:
-  pgdata:
-  chdata:
+  pgdata: null
+  chdata: null

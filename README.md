@@ -3,7 +3,7 @@
 The control plane is the identity and access core of Prism, a multi-tenant
 observability platform. It owns tenants, users, memberships (RBAC), and API keys,
 and exposes an internal endpoint that the ingest and query gateways call to verify
-credentials. This repository is being built in phases; Phases 1 through 4 are in place.
+credentials. This repository is being built in phases; Phases 1 through 4 plus 3b are in place.
 
 ## What is in Phase 1
 
@@ -75,12 +75,12 @@ spans to ClickHouse with dedup and retention TTLs. See `docs/STORAGE.md`.
 Phase 4 (current): query service. A tenant-scoped read API over ClickHouse for metric
 discovery, time-bucketed range queries, log search, and traces, with API-key auth, cost
 guards, and a discovery cache. See `docs/QUERY.md`.
-Phase 3b: OTLP/gRPC receiver (additive to the gateway; OTLP/HTTP already ingests).
+Phase 3b (current): OTLP/gRPC receiver on the gateway (port 4317), sharing the
+same pipeline as OTLP/HTTP. Most OpenTelemetry SDKs and Collectors default to gRPC.
 Phase 5: alerting. Phase 6: metering and FinOps. Phase 7: Kubernetes, Helm, Terraform,
 CI/CD, and load and chaos testing.
 
-Deferred: histogram and summary metric types (bucket-aware tables, a later phase); the
-OTLP/gRPC transport (Phase 3b); and, within Phase 4, a PromQL expression language and
+Deferred: histogram and summary metric types (bucket-aware tables, a later phase); and, within Phase 4, a PromQL expression language and
 console-token auth for direct browser access (query keys are the machine path for now).
 
 ## Note on dependency locking

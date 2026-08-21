@@ -48,6 +48,7 @@ type LimitsConfig struct {
 type GatewayConfig struct {
 	Env          Environment
 	HTTP         HTTPConfig
+	GRPC         GRPCConfig
 	Log          LogConfig
 	OTel         OTelConfig
 	Redis        RedisConfig
@@ -109,6 +110,11 @@ func LoadGateway() (GatewayConfig, error) {
 			ReadTimeout:     getDur("HTTP_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout:    getDur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 			ShutdownTimeout: getDur("HTTP_SHUTDOWN_TIMEOUT", 20*time.Second),
+		},
+		GRPC: GRPCConfig{
+			Enabled: getBool("GATEWAY_GRPC_ENABLED", true),
+			Host:    getStr("GRPC_HOST", "0.0.0.0"),
+			Port:    getInt("GRPC_PORT", 4317),
 		},
 		Log:   loadLog(),
 		OTel:  loadOTel("prism-gateway"),
