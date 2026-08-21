@@ -192,3 +192,71 @@ func LoadRelay() (RelayConfig, error) {
 	}
 	return cfg, nil
 }
+
+// --- Consumer (stream consumer to ClickHouse) ---
+
+type ClickHouseConfig struct {
+	Addr         string
+	Database     string
+	Username     string
+	Password     string
+	DialTimeout  time.Duration
+	MaxOpenConns int
+}
+
+type ConsumerConfig struct {
+	Env          Environment
+	Log          LogConfig
+	OTel         OTelConfig
+	HTTP         HTTPConfig
+	Kafka        KafkaConfig
+	ClickHouse   ClickHouseConfig
+	GroupID      string
+	BatchMaxRows int
+	BatchMaxWait time.Duration
+}
+
+// LoadConsumer reads and validates the stream consumer configuration.
+func LoadConsumer() (ConsumerConfig, error) {
+	var problems []string
+	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+
+	cfg := ConsumerConfig{
+		Env:  Environment(getStr("APP_ENV", string(EnvLocal))),
+		Log:  loadLog(),
+		OTel: loadOTel("prism-consumer"),
+		HTTP: HTTPConfig{
+			Host:            getStr("HTTP_HOST", "0.0.0.0"),
+			Port:            getInt("HTTP_PORT", 8091),
+			ReadTimeout:     getDur("HTTP_READ_TIMEOUT", 15*time.Second),
+			WriteTimeout:    getDur("HTTP_WRITE_TIMEOUT", 15*time.Second),
+			ShutdownTimeout: getDur("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
+		},
+		Kafka: loadKafka(),
+		ClickHouse: ClickHouseConfig{
+			Addr:         getStr("CLICKHOUSE_ADDR", "localhost:9000"),
+			Database:     getStr("CLICKHOUSE_DATABASE", "default"),
+			Username:     getStr("CLICKHOUSE_USERNAME", "default"),
+			Password:     getStr("CLICKHOUSE_PASSWORD", ""),
+			DialTimeout:  getDur("CLICKHOUSE_DIAL_TIMEOUT", 10*time.Second),
+			MaxOpenConns: getInt("CLICKHOUSE_MAX_OPEN_CONNS", 10),
+		},
+		GroupID:      getStr("KAFKA_CONSUMER_GROUP", "prism-consumer"),
+		BatchMaxRows: getInt("CONSUMER_BATCH_MAX_ROWS", 5000),
+		BatchMaxWait: getDur("CONSUMER_BATCH_MAX_WAIT", 1*time.Second),
+	}
+
+	if len(cfg.Kafka.Brokers) == 0 || cfg.Kafka.Brokers[0] == "" {
+		add("KAFKA_BROKERS is required")
+	}
+	if cfg.ClickHouse.Addr == "" {
+		add("CLICKHOUSE_ADDR is required")
+	}
+	if cfg.BatchMaxRows <= 0 {
+		add("CONSUMER_BATCH_MAX_ROWS must be positive")
+	}
+	if len(problems) > 0 {
+		return ConsumerConfig{}, fmt.Errorf("invalid consumer configuration:\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return cfg, nil
+}

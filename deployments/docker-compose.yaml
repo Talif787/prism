@@ -133,5 +133,57 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_SERVICE_NAME: prism-relay
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    environment:
+      CLICKHOUSE_DB: prism
+      CLICKHOUSE_USER: prism
+      CLICKHOUSE_PASSWORD: prism
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # native protocol
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - chdata:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user prism --password prism --query 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  consumer:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile
+      args:
+        CMD: consumer
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      HTTP_PORT: "8091"
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_AUTO_CREATE_TOPICS: "true"
+      KAFKA_CONSUMER_GROUP: prism-consumer
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DATABASE: prism
+      CLICKHOUSE_USERNAME: prism
+      CLICKHOUSE_PASSWORD: prism
+      CONSUMER_BATCH_MAX_ROWS: "5000"
+      CONSUMER_BATCH_MAX_WAIT: 1s
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SERVICE_NAME: prism-consumer
+    ports:
+      - "8091:8091"
+
 volumes:
   pgdata:
+  chdata:
