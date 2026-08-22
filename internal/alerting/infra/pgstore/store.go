@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/jackc/pgx/v5/pgconn"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,8 +25,21 @@ const ruleColumns = `id, tenant_id, name, metric, agg, group_by, filters, window
 	operator, threshold, for_seconds, interval_seconds, severity, labels, annotations,
 	notify_webhook, enabled, last_evaluated_at, created_at, updated_at`
 
+// translateWrite converts a Postgres unique-violation on the rule name into a
+// typed conflict error; all other errors pass through unchanged.
+func translateWrite(err error) error {
+	if err == nil {
+		return nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return domain.ErrRuleNameExists
+	}
+	return err
+}
+
 func (s *Store) CreateRule(ctx context.Context, r *domain.Rule) error {
-	return s.pool.QueryRow(ctx, `
+	err := s.pool.QueryRow(ctx, `
 		INSERT INTO alert_rules
 		  (tenant_id, name, metric, agg, group_by, filters, window_seconds, operator, threshold,
 		   for_seconds, interval_seconds, severity, labels, annotations, notify_webhook, enabled)
@@ -36,6 +50,7 @@ func (s *Store) CreateRule(ctx context.Context, r *domain.Rule) error {
 		seconds(r.For), seconds(r.Interval), r.Severity,
 		mapJSON(r.Labels), mapJSON(r.Annotations), r.Webhook, r.Enabled,
 	).Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt)
+	return translateWrite(err)
 }
 
 func (s *Store) GetRule(ctx context.Context, tenantID, id string) (*domain.Rule, error) {
@@ -66,7 +81,7 @@ func (s *Store) UpdateRule(ctx context.Context, r *domain.Rule) error {
 		r.Severity, mapJSON(r.Labels), mapJSON(r.Annotations), r.Webhook, r.Enabled,
 	)
 	if err != nil {
-		return err
+		return translateWrite(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
