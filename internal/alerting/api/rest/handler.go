@@ -143,14 +143,32 @@ func (h *Handler) deleteRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listAlerts(w http.ResponseWriter, r *http.Request) {
-	instances, err := h.svc.ListAlerts(r.Context(), tenantOf(r))
+	tenant := tenantOf(r)
+	instances, err := h.svc.ListAlerts(r.Context(), tenant)
 	if err != nil {
 		h.writeErr(w, r, err)
 		return
 	}
+	rules, err := h.svc.ListRules(r.Context(), tenant)
+	if err != nil {
+		h.writeErr(w, r, err)
+		return
+	}
+	byID := make(map[string]*domain.Rule, len(rules))
+	for i := range rules {
+		byID[rules[i].ID] = &rules[i]
+	}
 	out := make([]instanceResponse, 0, len(instances))
 	for i := range instances {
-		out = append(out, toInstanceResponse(&instances[i]))
+		resp := toInstanceResponse(&instances[i])
+		if rule := byID[instances[i].RuleID]; rule != nil {
+			resp.RuleName = rule.Name
+			resp.Metric = rule.Metric
+			resp.Operator = string(rule.Operator)
+			resp.Threshold = rule.Threshold
+			resp.Severity = rule.Severity
+		}
+		out = append(out, resp)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"alerts": out})
 }
@@ -165,6 +183,8 @@ func (h *Handler) writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Unauthorized", "invalid API key")
 	case errors.Is(err, app.ErrForbidden):
 		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "insufficient scope")
+	case errors.Is(err, domain.ErrRuleNameExists):
+		httpx.WriteProblem(w, r, http.StatusConflict, "conflict", "Conflict", err.Error())
 	default:
 		h.logger.ErrorContext(r.Context(), "alerting request failed", slog.Any("error", err))
 		httpx.WriteProblem(w, r, http.StatusInternalServerError, "internal", "Internal error", "the request could not be completed")
@@ -265,6 +285,11 @@ func toRuleResponse(r *domain.Rule) ruleResponse {
 
 type instanceResponse struct {
 	RuleID      string            `json:"rule_id"`
+	RuleName    string            `json:"rule_name,omitempty"`
+	Metric      string            `json:"metric,omitempty"`
+	Operator    string            `json:"operator,omitempty"`
+	Threshold   float64           `json:"threshold"`
+	Severity    string            `json:"severity,omitempty"`
 	Fingerprint string            `json:"fingerprint"`
 	Labels      map[string]string `json:"labels"`
 	State       string            `json:"state"`

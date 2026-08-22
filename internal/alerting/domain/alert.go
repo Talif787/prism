@@ -16,7 +16,8 @@ var (
 	// ErrNotFound is returned when a rule does not exist for the tenant.
 	ErrNotFound = errors.New("not found")
 	// ErrInvalidRule is returned when a rule fails validation.
-	ErrInvalidRule = errors.New("invalid rule")
+	ErrInvalidRule    = errors.New("invalid rule")
+	ErrRuleNameExists = errors.New("a rule with this name already exists")
 )
 
 // State is the lifecycle state of an alert instance. Resolved instances are not
